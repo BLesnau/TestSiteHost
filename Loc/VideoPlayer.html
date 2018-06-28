@@ -1,0 +1,155 @@
+﻿<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+   <!-- Use lastest version of Internet Explorer -->
+   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+   <meta charset="utf-8" />
+   <title>Localized Video Player</title>
+
+   <style>
+      #videoControl {
+         position: absolute;
+         z-index: 1;
+         border-style: solid
+      }
+
+      #canvasControl {
+         position: relative;
+         z-index: 20;
+      }
+   </style>
+</head>
+<body>
+
+   <div style="text-align: center; margin: 50px auto">
+      <video id="videoControl" onloadeddata="onVideoLoaded()" loop muted></video>
+      <canvas id="canvasControl"></canvas>
+   </div>
+
+   <script>
+      var videoControl = document.getElementById("videoControl");
+      var canvasControl = document.getElementById("canvasControl");
+      var containerControl = document.getElementById("containerControl");
+      var jsonPath = getUrlParam(location.search, "jsonPath", "?");
+      if (jsonPath == null) {
+         jsonPath = getUrlParam(window.location.hash, "jsonPath", "#");
+      }
+
+      var videoPath = getUrlParam(location.search, "videoPath", "?");
+      if (videoPath == null) {
+         videoPath = getUrlParam(window.location.hash, "videoPath", "#");
+      }
+
+      var jsonObj = null;
+      var prevTime = null;
+      var currentTime = 0;
+
+      if (jsonPath != null) {
+         loadJSON(jsonPath);
+      }
+      else {
+         console.log("Parameter for the json file path was not found");
+      }
+
+      function setParams(filePath) {
+         loadJSON(filePath);
+      }
+
+      function loadJSON(filePath) {
+         jsonObj = readJSON(filePath);
+         if (jsonObj != null) {
+            videoControl.src = videoPath;
+            playVideo();
+         }
+      }
+
+      function onVideoLoaded() {
+         canvasControl.width = videoControl.videoWidth;
+         canvasControl.height = videoControl.videoHeight;
+      }
+
+      function getUrlParam(str, paramName, startChar) {
+         paramName = paramName.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+         var regex = new RegExp('[\\' + startChar + '?&]' + paramName + '=([^&#]*)');
+         var results = regex.exec(str);
+         return results === null ? null : decodeURIComponent(results[1].replace(/\+/g, ' '));
+      }
+
+      function readJSON(jsonPath) {
+         var jsonText = null;
+         var jsonObj = null;
+
+         var rawFile = new XMLHttpRequest();
+         rawFile.open("GET", jsonPath, false);
+         rawFile.onreadystatechange = function () {
+            if (rawFile.readyState === 4) {
+               if (rawFile.status === 200 || rawFile.status === 0) {
+                  jsonText = rawFile.responseText;
+               }
+            }
+         }
+         rawFile.send(null);
+
+         if (jsonText != null) {
+            jsonObj = JSON.parse(jsonText);
+            if (jsonObj == null) {
+               alert("JSON text could not be deserialized");
+            }
+         } else {
+            alert("Could not read JSON text");
+         }
+
+         return jsonObj;
+      }
+
+      function convertTimeSpanToMs(timeSpan) {
+         var timeSpanParts = timeSpan.split(":");
+         if (timeSpanParts.length === 3) {
+            var ms = (timeSpanParts[0] * 60 * 60 * 1000) + (timeSpanParts[1] * 60 * 1000) + (timeSpanParts[2] * 1000);
+            return ms;
+         }
+         return 0;
+      }
+
+      function removeAtIndex(str, index) {
+         return str.slice(0, index) + str.slice(index + 1);
+      }
+
+      function onTimer() {
+         currentTime = videoControl.currentTime * 1000;
+
+         // This is here currently to clear the canvas of anything drawn on it so that we can redraw everything
+         // This can be optimized to draw everything once and then remove it later
+         canvasControl.width = videoControl.videoWidth;
+         canvasControl.height = videoControl.videoHeight;
+
+         if (jsonObj != null) {
+            for (var i in jsonObj.VideoStrings) {
+               var s = jsonObj.VideoStrings[i];
+               var timeToStart = convertTimeSpanToMs(s.TimeToStart);
+               var duration = convertTimeSpanToMs(s.Duration);
+
+               if (timeToStart <= currentTime && currentTime <= (timeToStart + duration)) {
+                  if (s.PositionType === 0) {
+                     var ctx = canvasControl.getContext("2d");
+                     ctx.font = s.FontStyle + " " + s.FontWeight + " " + s.FontSize + "px " + s.fontFamily;
+                     ctx.fillStyle = removeAtIndex(removeAtIndex(s.FontColor, 1), 1);
+                     ctx.fillText(s.String, s.PositionX, s.PositionY);
+                  }
+               }
+            }
+         }
+
+         setTimeout(onTimer, 0);
+      }
+
+      function playVideo() {
+         videoControl.play();
+         onTimer();
+      }
+   </script>
+
+</body>
+</html>
